@@ -9,5 +9,11 @@
       "description": "Helpers for anything to do with conda"
     }
   ],
-  "skills": []
+  "skills": [
+    {
+        "name": "email-automation",
+        "source": "./plugins/email-automation",
+        "description": "Automate creating and sending emails"
+    }
+  ]
 }
