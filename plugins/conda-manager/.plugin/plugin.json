@@ -1,0 +1,9 @@
+{
+  "name": "conda-manager",
+  "version": "1.0.0",
+  "description": "Helpers for anything to do with conda",
+  "author": {
+    "name": "Hariz",
+    "email": "-"
+  }
+}

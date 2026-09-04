@@ -1,0 +1,13 @@
+{
+  "name": "aingineer-team-catalog",
+  "owner": { "name": "ryz", "email": "-" },
+  "description": "Shared plugins and skills for our OpenHands agents",
+  "plugins": [
+    {
+      "name": "conda-manager",
+      "source": "./plugins/conda-manager",
+      "description": "Helpers for anything to do with conda"
+    }
+  ],
+  "skills": []
+}
