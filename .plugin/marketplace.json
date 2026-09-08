@@ -7,13 +7,12 @@
       "name": "conda-manager",
       "source": "./plugins/conda-manager",
       "description": "Helpers for anything to do with conda"
+    },
+    {
+      "name": "email-automation",
+      "source": "./plugins/email-automation",
+      "description": "Send templated emails and run authorized security-awareness campaigns via Azure Communication Services"
     }
   ],
-  "skills": [
-    {
-        "name": "email-automation",
-        "source": "./plugins/email-automation",
-        "description": "Automate creating and sending emails"
-    }
-  ]
+  "skills": []
 }

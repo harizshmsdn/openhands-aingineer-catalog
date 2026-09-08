@@ -1,2 +1,7 @@
 # macOS
 .DS_Store
+
+# email-automation: org-specific recipient allowlist must never be committed.
+# The tracked template is allowlist.example.txt.
+plugins/email-automation/allowlist.txt
+email_allowlist.txt

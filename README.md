@@ -35,7 +35,7 @@ design: it is what lets you ship a plugin without a rebuild or a redeploy.
 
 | Artifact | Version | Cadence | Changed by |
 | --- | --- | --- | --- |
-| This catalog | `v0.1.0` | Weekly — whenever a PR merges | Anyone, via PR |
+| This catalog | `v0.1.1` | Weekly — whenever a PR merges | Anyone, via PR |
 | Sandbox image | `openhands-aingineer-sandbox:v1` | On demand for new root/system tools | Platform owner |
 
 A normal contribution touches only the left column: add a directory under
@@ -232,7 +232,7 @@ their agent. Until they do that, they keep working exactly as before.
 ## Repo layout
 
 ```
-openhands-catalog/
+openhands-aingineer-catalog/
 ├── .plugin/
 │   └── marketplace.json      # the index — lists every plugin & skill
 └── plugins/

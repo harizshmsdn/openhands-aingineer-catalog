@@ -1,0 +1,21 @@
+# EXAMPLE recipient allowlist for the email-automation skill.
+#
+# You usually do NOT need this file. Recipient scope resolves in three tiers
+# (first match wins), described in SKILL.md and references/recipients.md:
+#   1. Default:  the verified sender's own domain is always in scope.
+#   2. Override: the EMAIL_ALLOWLIST env var (comma-separated), next to your
+#                AZURE_COMMUNICATION_CONNECTION_STRING.
+#   3. File:     this file, only if you prefer a file to an env var.
+#
+# Only create a real allowlist (env var or file) when you need to send BEYOND
+# the sender's own domain. Keep org-specific values OUT of the public repo:
+# copy this to a gitignored path (e.g. /workspace/email_allowlist.txt or
+# plugins/email-automation/allowlist.txt, both gitignored). Never commit it.
+#
+# One entry per line. Two forms are allowed:
+#   *@example.com            a domain wildcard (any address at that domain)
+#   someone@example.com      a single full address
+# Lines starting with '#' and blank lines are ignored.
+
+# *@yourdomain.com
+# contractor@partnerdomain.com

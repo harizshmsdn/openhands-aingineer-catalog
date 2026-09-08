@@ -1,0 +1,9 @@
+{
+  "name": "email-automation",
+  "version": "1.0.0",
+  "description": "Send templated emails and run authorized security-awareness (phishing-simulation) campaigns via Azure Communication Services",
+  "author": {
+    "name": "ryz",
+    "email": "-"
+  }
+}
