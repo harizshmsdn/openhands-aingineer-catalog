@@ -16,6 +16,7 @@ Examples:
     --scenario password-reset --authorizer jane@yourdomain.com --send
 """
 import argparse, csv, hashlib, json, os, pathlib, subprocess, sys, time
+import urllib.request, urllib.error
 
 try:
     from jinja2 import Environment, select_autoescape
@@ -76,6 +77,31 @@ def render(env, template_src, context):
     return env.from_string(template_src).render(**context)
 
 
+def send_via_brevo(api_key, sender, to_email, subject, html_body):
+    url = "https://api.brevo.com/v3/smtp/email"
+    headers = {
+        "accept": "application/json",
+        "api-key": api_key,
+        "content-type": "application/json"
+    }
+    payload = {
+        "sender": {"email": sender},
+        "to": [{"email": to_email}],
+        "subject": subject,
+        "htmlContent": html_body
+    }
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    try:
+        with urllib.request.urlopen(req) as response:
+            return True, None
+    except urllib.error.HTTPError as e:
+        error_msg = f"HTTP Error {e.code}: {e.read().decode('utf-8')}"
+        return False, error_msg
+    except Exception as e:
+        return False, str(e)
+
+
 def main():
     ap = argparse.ArgumentParser(description="Render/send an ACS email campaign.")
     ap.add_argument("--template", required=True, help="path to the HTML (jinja2) template")
@@ -90,6 +116,8 @@ def main():
     ap.add_argument("--preview-dir", default="/workspace/email_preview")
     ap.add_argument("--send", action="store_true", help="actually send (default: dry run)")
     ap.add_argument("--confirm-bulk", action="store_true", help="ack a >%d send" % BULK_THRESHOLD)
+    ap.add_argument("--provider", choices=["azure", "brevo"], default="azure", help="email provider (default: azure)")
+    ap.add_argument("--transactional", action="store_true", help="bypass allowlist for transactional emails (e.g. RFQs)")
     args = ap.parse_args()
 
     if not args.recipients and not args.to:
@@ -103,6 +131,10 @@ def main():
         sys.exit("scope not configured: no sender domain, EMAIL_ALLOWLIST, or allowlist file")
 
     out_of_scope = [r["email"] for r in recipients if not in_scope(r["email"], allow)]
+    if out_of_scope and args.transactional:
+        print(f"TRANSACTIONAL MODE: bypassing allowlist for {len(out_of_scope)} recipients.")
+        out_of_scope = []
+        
     template_src = pathlib.Path(args.template).read_text()
     env = Environment(autoescape=select_autoescape(["html", "xml"]))
 
@@ -139,26 +171,38 @@ def main():
         sys.exit("refusing to send: out-of-scope recipients present (see above)")
     if len(recipients) > BULK_THRESHOLD and not args.confirm_bulk:
         sys.exit(f"{len(recipients)} recipients exceeds {BULK_THRESHOLD}; pass --confirm-bulk")
-    if not args.connection_string and not os.environ.get("AZURE_COMMUNICATION_CONNECTION_STRING"):
+        
+    if args.provider == "azure" and not args.connection_string and not os.environ.get("AZURE_COMMUNICATION_CONNECTION_STRING"):
         sys.exit("no auth: set AZURE_COMMUNICATION_CONNECTION_STRING or pass --connection-string")
+    if args.provider == "brevo" and not os.environ.get("BREVO_API_KEY"):
+        sys.exit("no auth: set BREVO_API_KEY environment variable for Brevo provider")
 
     archive = pathlib.Path(args.archive_dir)
     archive.mkdir(parents=True, exist_ok=True)
     ts = time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
     sent, failed = [], []
     for r in rendered:
-        cmd = ["az", "communication", "email", "send",
-               "--sender", args.sender, "--to", r["email"],
-               "--subject", r["subject"], "--html", r["body"]]
-        if args.connection_string:
-            cmd += ["--connection-string", args.connection_string]
-        res = subprocess.run(cmd, capture_output=True, text=True)
-        if res.returncode == 0:
-            sent.append(r["email"])
-            (archive / f"{ts}_{r['email'].replace('/', '_')}.html").write_text(r["body"])
-        else:
-            # Never silently retry: record the exact error and keep going.
-            failed.append({"email": r["email"], "error": res.stderr.strip()})
+        if args.provider == "azure":
+            cmd = ["az", "communication", "email", "send",
+                   "--sender", args.sender, "--to", r["email"],
+                   "--subject", r["subject"], "--html", r["body"]]
+            if args.connection_string:
+                cmd += ["--connection-string", args.connection_string]
+            res = subprocess.run(cmd, capture_output=True, text=True)
+            if res.returncode == 0:
+                sent.append(r["email"])
+                (archive / f"{ts}_{r['email'].replace('/', '_')}.html").write_text(r["body"])
+            else:
+                # Never silently retry: record the exact error and keep going.
+                failed.append({"email": r["email"], "error": res.stderr.strip()})
+        elif args.provider == "brevo":
+            api_key = os.environ.get("BREVO_API_KEY")
+            success, err = send_via_brevo(api_key, args.sender, r["email"], r["subject"], r["body"])
+            if success:
+                sent.append(r["email"])
+                (archive / f"{ts}_{r['email'].replace('/', '_')}.html").write_text(r["body"])
+            else:
+                failed.append({"email": r["email"], "error": err})
 
     emails = [r["email"] for r in recipients]
     manifest = {
