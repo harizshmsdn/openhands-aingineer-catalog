@@ -1,51 +1,56 @@
 ---
 name: email-automation
-description: Send templated emails, run phishing simulations, and generate leads via Azure/Brevo.
-version: "1.0"
-compatibility: Requires Azure CLI or BREVO_API_KEY, and jinja2.
+description: Send templated emails, notification campaigns, and RFQs via Microsoft Graph API (Entra ID OAuth) or Brevo.
+version: "2.0"
+compatibility: Requires Entra ID secrets in OpenHands UI (App ID, Directory ID, Secret, Object ID) or BREVO_API_KEY.
 metadata:
   author: ryz
 triggers:
   - send an email
   - notify by email
-  - phishing simulation
+  - notification simulation
   - generate leads
   - rfq emails
 ---
 # Email Automation
-Core script: `scripts/send_campaign.py`. Format details: `references/recipients.md`.
 
-## Rules
-- **Authorized Only**: Sender must be an owned, verified domain. No spoofing.
-- **Scope**: Recipients must match allowlist (default: sender's domain).
-- **Exceptions**: External transactional emails (e.g., RFQs) bypass allowlist via `--transactional`.
-- **Audit**: Never delete archived payloads or manifest.
+Automated email delivery via Microsoft Graph API (OAuth 2.0) and Brevo.
 
-## 1. Lead Gen Workflow (HITL)
-For transactional OSINT (e.g. RFQs):
-1. **Discover**: Use `duckduckgo_search` to find target domains. Save as `domains.csv`.
-2. **Extract**: Run `python scripts/extract_emails.py --input domains.csv --output leads.csv` (Auto-runs Tier 2A scrape + 2B theHarvester fallback).
-3. **Validate**: Run `python scripts/validate_leads.py --input leads.csv --output leads_validated.csv` (Filters dead MX).
-4. **Template**: Fetch/modify from `plugins/email-automation/templates`. (Create `.j2` dynamically if missing).
-5. **HITL Check**: **Pause for user confirmation on `leads_validated.csv`**.
-6. **Send**: Run `send_campaign.py` with `--transactional --provider brevo`.
+## Core Rules
+- **Automatic Sender**: Sender is locked to the requesting user's email, auto-resolved via Entra ID `OBJECT_ID`. **Never ask the user for a sender address.**
+- **Scope**: Recipients must match sender domain or allowlist. Bypass for external outreach using `--transactional`.
+- **HITL (Human in the Loop)**: Always execute dry run first. Present preview payloads and pause for user confirmation before `--send`.
+- **Compliance**: Never delete archive manifests or rendered `.html` payloads.
 
-## 2. Standard/Phishing Workflow
-1. **Gather**: Sender, subject, recipients (CSV/JSON), scenario.
-2. **Template**: `.j2` variables map to CSV columns.
-3. **Dry Run (Mandatory)**: Render payloads & verify scope (no `--send`). **Wait for user confirmation.**
-4. **Send**: Execute with `--send`. Requires `--confirm-bulk` if >50 recipients.
+## 1. Lead Generation Workflow (RFQs)
+1. **Discover**: Search target domains via search tool. Save to `domains.csv`.
+2. **Extract**: `python scripts/extract_emails.py --input domains.csv --output leads.csv`
+3. **Validate**: `python scripts/validate_leads.py --input leads.csv --output leads_validated.csv`
+4. **Template**: Pick/create template in `plugins/email-automation/templates/*.j2`.
+5. **Preview**: Run dry run without `--send`.
+6. **HITL Pause**: Present sample and ask user for confirmation.
+7. **Send**: Run with `--transactional --send`.
 
-## Execution
+## 2. Notification Workflow
+1. Select template (`.j2`) and recipients (`.csv`, `.json`, or `--to`).
+2. **Dry Run (Required)**: Render payloads and inspect scope.
+3. **HITL Pause**: Wait for user confirmation.
+4. **Send**: Run with `--send` (add `--confirm-bulk` if >50 recipients).
+
+## Execution CLI
+
 ```bash
 SEND=$(find "$HOME/.openhands/cache/plugins" . -name send_campaign.py -type f 2>/dev/null | head -1)
 
-# Dry run (Preview)
-python "$SEND" --template alert.j2 --recipients reps.csv --sender x@dom.com --subject "Hi"
+# Dry run (Sender auto-resolved from Entra ID)
+python "$SEND" --template alert.j2 --recipients reps.csv --subject "Notification"
 
-# Send (Phishing/Internal)
-python "$SEND" --template alert.j2 --recipients reps.csv --sender x@dom.com --subject "Hi" --send
+# Send via Microsoft Graph (Default)
+python "$SEND" --template alert.j2 --recipients reps.csv --subject "Notification" --send
 
-# Send (Lead Gen / Brevo)
-python "$SEND" --template rfq.j2 --recipients leads.csv --sender x@dom.com --subject "RFQ" --provider brevo --transactional --send
+# Send Transactional / RFQ
+python "$SEND" --template rfq.j2 --recipients leads.csv --subject "RFQ" --transactional --send
+
+# Inline recipients (Quick send)
+python "$SEND" --template alert.j2 --to alice@domain.com --subject "Direct Alert" --send
 ```

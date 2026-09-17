@@ -1,7 +1,7 @@
 {
   "name": "email-automation",
-  "version": "1.0.0",
-  "description": "Send templated emails and run authorized security-awareness (phishing-simulation) campaigns via Azure Communication Services",
+  "version": "2.0.0",
+  "description": "Send templated emails and run automated email campaigns via Microsoft Graph API (Entra ID OAuth) and Brevo",
   "author": {
     "name": "ryz",
     "email": "-"

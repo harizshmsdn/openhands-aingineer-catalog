@@ -1,26 +1,30 @@
-# Recipients, scope, and manifest formats
+# Recipients, Scope, and Manifest Reference
 
-Detail for `send_campaign.py`.
+Reference documentation for `send_campaign.py`.
 
 ## Recipients File
-CSV or JSON with an `email` column. Other columns become jinja2 variables.
+CSV or JSON with an `email` column. Other columns map to Jinja2 template variables.
 ```csv
 email,first_name,department
-alice@dom.com,Alice,Finance
+alice@company.com,Alice,Finance
 ```
-Agent generates this during Lead Gen. Small sends can use `--to a@x.com`.
+Small ad-hoc sends can use inline addresses: `--to alice@company.com bob@company.com`.
 
-## Allowlist (Scope)
-Unmatched recipients are rejected. Resolved via:
-1. **Verified sender domain (default)**: `*@<sender-domain>`.
-2. **`EMAIL_ALLOWLIST`**: Env var (comma-separated).
-3. **Files**: `/workspace/email_allowlist.txt` or `plugins/email-automation/allowlist.txt`.
-
-**Bypass**: Use `--transactional` for external business emails (like RFQs) to skip allowlist checks. Not for phishing.
+## Sender Identity & Scope
+- **Sender Auto-Resolution**: The agent queries Microsoft Graph using the requesting user's Entra ID `OBJECT_ID`. It automatically sets the sender to the user's primary email address (`mail` or `userPrincipalName`).
+- **Scope Checking**: Unmatched recipients outside the sender domain or allowlist are rejected.
+  1. **Sender Domain (Default)**: `*@<sender-domain>`
+  2. **`EMAIL_ALLOWLIST`**: Env variable (comma-separated).
+  3. **Allowlist Files**: `/workspace/email_allowlist.txt` or `plugins/email-automation/allowlist.txt`.
+- **Transactional Bypass**: Use `--transactional` for external communications (such as RFQs) to bypass allowlist boundaries.
 
 ## Providers
-- **Azure (Default)**: Uses `az communication email send`. Requires `AZURE_COMMUNICATION_CONNECTION_STRING` or `az login`.
-- **Brevo**: Pass `--provider brevo`. Requires `BREVO_API_KEY`. Uses standard HTTP requests.
+- **Microsoft Graph / Entra ID (Default)**: OAuth 2.0 Client Credentials flow using OpenHands secrets:
+  - App (Client) ID (`AZURE_CLIENT_ID` / `APP_ID`)
+  - Directory (Tenant) ID (`AZURE_TENANT_ID` / `DIRECTORY_ID`)
+  - Client Secret (`AZURE_CLIENT_SECRET` / `CLIENT_SECRET`)
+  - User Object ID (`AZURE_OBJECT_ID` / `OBJECT_ID`)
+- **Brevo**: Pass `--provider brevo`. Requires `BREVO_API_KEY`.
 
-## Manifest
-A manifest (`<archive-dir>/<timestamp>_manifest.json`) and full HTML payload archives are generated on every real send for audit and compliance. Do not delete.
+## Manifest & Compliance
+Every real send writes a timestamped audit record (`<archive-dir>/<timestamp>_manifest.json`) and copies of rendered `.html` payloads. Never delete these records.

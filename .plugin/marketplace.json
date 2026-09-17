@@ -11,7 +11,7 @@
     {
       "name": "email-automation",
       "source": "./plugins/email-automation",
-      "description": "Send templated emails and run authorized security-awareness campaigns via Azure Communication Services"
+      "description": "Send templated emails and run automated email campaigns via Microsoft Graph API (Entra ID OAuth) and Brevo"
     }
   ],
   "skills": []
