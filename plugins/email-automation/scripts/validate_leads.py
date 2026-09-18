@@ -22,9 +22,8 @@ def check_syntax(email):
 
 def check_mx(domain):
     try:
-        # Zero-dependency MX lookup using dig
+        # Query MX records via dig
         res = subprocess.run(["dig", "+short", "MX", domain], capture_output=True, text=True, timeout=5)
-        # If there's any output, it means there are MX records.
         return bool(res.stdout.strip())
     except Exception as e:
         print(f"  [!] MX lookup failed for {domain}: {e}")
@@ -51,26 +50,21 @@ def main():
     valid_rows = []
     invalid_rows = []
     
-    print(f"Validating {len(rows)} leads...")
-
     for row in rows:
         email = row.get("email", "").strip()
         if not email:
             invalid_rows.append((row, "Empty email"))
             continue
-            
+
         if not check_syntax(email):
-            print(f"  [-] Invalid syntax: {email}")
             invalid_rows.append((row, "Syntax error"))
             continue
-            
+
         domain = email.split("@")[1]
         if not check_mx(domain):
-            print(f"  [-] Dead domain (No MX): {email}")
             invalid_rows.append((row, "No MX record"))
             continue
-            
-        print(f"  [+] Valid: {email}")
+
         valid_rows.append(row)
 
     with open(args.output, mode="w", encoding="utf-8", newline="") as outfile:
@@ -78,11 +72,7 @@ def main():
         writer.writeheader()
         writer.writerows(valid_rows)
 
-    print("\n--- Validation Summary ---")
-    print(f"Total processed : {len(rows)}")
-    print(f"Valid (Kept)    : {len(valid_rows)}")
-    print(f"Invalid (Dropped): {len(invalid_rows)}")
-    print(f"Saved to        : {args.output}")
+    print(f"Validated {len(rows)} leads: {len(valid_rows)} valid, {len(invalid_rows)} dropped -> {args.output}")
 
 if __name__ == "__main__":
     main()

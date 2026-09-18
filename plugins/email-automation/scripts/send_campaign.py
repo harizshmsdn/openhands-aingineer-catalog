@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import argparse, csv, hashlib, json, os, pathlib, sys, time
+import argparse, csv, hashlib, json, os, pathlib, re, sys, time
 import urllib.request, urllib.error, urllib.parse
 
 try:
@@ -79,6 +79,13 @@ def in_scope(email, allow):
 # Render Jinja2 template with context
 def render(env, template_src, context):
     return env.from_string(template_src).render(**context)
+
+
+# Strip HTML tags and styling for token-efficient preview
+def to_plain_text(html_text):
+    clean = re.sub(r"<(style|head|script)[^>]*>.*?</\1>", "", html_text, flags=re.DOTALL | re.IGNORECASE)
+    clean = re.sub(r"<[^>]+>", " ", clean)
+    return " ".join(clean.split())
 
 
 # Request OAuth2 client credentials token from Entra ID
@@ -174,7 +181,8 @@ def send_via_brevo(api_key, sender, to_email, subject, html_body):
 
 def main():
     ap = argparse.ArgumentParser(description="Render/send email campaigns via Microsoft Graph or Brevo.")
-    ap.add_argument("--template", required=True, help="path to the HTML (jinja2) template")
+    ap.add_argument("--template", help="path to the HTML (jinja2) template")
+    ap.add_argument("--body", help="inline email body content (HTML or plain text)")
     ap.add_argument("--sender", help="optional sender override; validated against requesting user")
     ap.add_argument("--subject", required=True, help="subject line (may use jinja2 vars)")
     ap.add_argument("--recipients", help="recipients CSV or JSON file")
@@ -187,7 +195,7 @@ def main():
     ap.add_argument("--confirm-bulk", action="store_true", help="ack a >%d send" % BULK_THRESHOLD)
     ap.add_argument("--provider", choices=["graph", "azure", "brevo"], default="graph",
                     help="provider: graph (Microsoft Graph/Entra, default) or brevo")
-    ap.add_argument("--transactional", action="store_true", help="bypass allowlist for transactional emails (e.g. RFQs)")
+    ap.add_argument("--transactional", action="store_true", help="mark campaign as transactional outreach")
     args = ap.parse_args()
 
     # Map legacy azure provider to graph
@@ -197,6 +205,9 @@ def main():
     if not args.recipients and not args.to:
         sys.exit("provide --recipients FILE or --to addr [addr ...]")
 
+    if not args.template and not args.body:
+        sys.exit("provide either --template PATH or --body 'content'")
+
     graph_token = None
     object_id = None
 
@@ -205,11 +216,14 @@ def main():
         tenant_id = get_env("AZURE_TENANT_ID", "ENTRA_TENANT_ID", "DIRECTORY_ID")
         client_id = get_env("AZURE_CLIENT_ID", "ENTRA_CLIENT_ID", "APP_ID")
         client_secret = get_env("AZURE_CLIENT_SECRET", "ENTRA_CLIENT_SECRET", "CLIENT_SECRET")
-        object_id = get_env("AZURE_OBJECT_ID", "ENTRA_OBJECT_ID", "OBJECT_ID", "USER_OBJECT_ID")
+        object_id = get_env("AZURE_OBJECT_ID", "ENTRA_OBJECT_ID", "OBJECT_ID", "USER_OBJECT_ID",
+                            "AZURE_USER_EMAIL", "AZURE_UPN", "USER_PRINCIPAL_NAME")
 
         if not all([tenant_id, client_id, client_secret, object_id]):
-            if args.send or not args.sender:
+            if args.send:
                 sys.exit("Missing Entra ID secrets in environment: requires App ID, Directory ID, Secret, and Object ID")
+            elif not args.sender:
+                args.sender = "requesting-user@company.internal"
         else:
             graph_token = get_graph_token(tenant_id, client_id, client_secret)
             resolved_sender = get_user_email_from_graph(graph_token, object_id)
@@ -225,15 +239,23 @@ def main():
     if not recipients:
         sys.exit("no recipients found")
     allow = load_allowlist(args.sender)
-    if not allow:
-        sys.exit("scope not configured: no sender domain, EMAIL_ALLOWLIST, or allowlist file")
+    external_recipients = [r["email"] for r in recipients if not in_scope(r["email"], allow)]
 
-    out_of_scope = [r["email"] for r in recipients if not in_scope(r["email"], allow)]
-    if out_of_scope and args.transactional:
-        print(f"TRANSACTIONAL MODE: bypassing allowlist for {len(out_of_scope)} recipients.")
-        out_of_scope = []
+    # Load template from file or construct HTML from body
+    if args.template:
+        template_src = pathlib.Path(args.template).read_text()
+    else:
+        if "<html" in args.body.lower() or "<p>" in args.body.lower() or "<div>" in args.body.lower():
+            template_src = args.body
+        else:
+            paragraphs = "".join(f"<p>{p.strip()}</p>" for p in args.body.split("\n\n") if p.strip())
+            template_src = (
+                "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n"
+                "<style>body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; "
+                "line-height: 1.6; color: #1e293b; max-width: 600px; margin: 0 auto; padding: 20px; }</style>\n"
+                "</head>\n<body>\n" + (paragraphs or f"<p>{args.body}</p>") + "\n</body>\n</html>"
+            )
 
-    template_src = pathlib.Path(args.template).read_text()
     env = Environment(autoescape=select_autoescape(["html", "xml"]))
 
     # Render payloads for previews and archiving
@@ -248,24 +270,21 @@ def main():
         rendered.append({"email": r["email"], "subject": subject,
                          "body": body, "path": str(path)})
 
-    print(f"sender        : {args.sender}")
-    print(f"recipients    : {len(recipients)}")
-    print(f"sample subject: {rendered[0]['subject']}")
-    print(f"payloads      : {out_dir}/")
-    for r in recipients[:5]:
-        print(f"  - {r['email']}")
-    if len(recipients) > 5:
-        print(f"  ... and {len(recipients) - 5} more")
-    if out_of_scope:
-        print(f"\nOUT OF SCOPE ({len(out_of_scope)}): {', '.join(out_of_scope[:10])}")
-        print("These match no allowlist tier. Fix the list or the allowlist before sending.")
-
     if not args.send:
-        print("\nDRY RUN. Nothing sent. Re-run with --send after confirming the above.")
+        preview_text = to_plain_text(rendered[0]["body"])
+        if len(preview_text) > 300:
+            preview_text = preview_text[:300] + "..."
+        to_str = ", ".join(r["email"] for r in recipients[:3])
+        if len(recipients) > 3:
+            to_str += f" (+{len(recipients) - 3} more)"
+        print(f"[DRY RUN] To: {to_str} ({len(recipients)} recipient{'s' if len(recipients) != 1 else ''})")
+        print(f"Subject: {rendered[0]['subject']}")
+        print(f"Body: {preview_text}")
+        print(f"Payload: {rendered[0]['path']}")
         return 0
 
-    if out_of_scope:
-        sys.exit("refusing to send: out-of-scope recipients present (see above)")
+    print(f"Sending to {len(recipients)} recipient(s)...")
+
     if len(recipients) > BULK_THRESHOLD and not args.confirm_bulk:
         sys.exit(f"{len(recipients)} recipients exceeds {BULK_THRESHOLD}; pass --confirm-bulk")
 

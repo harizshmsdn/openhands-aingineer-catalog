@@ -1,56 +1,42 @@
 ---
 name: email-automation
-description: Send templated emails, notification campaigns, and RFQs via Microsoft Graph API (Entra ID OAuth) or Brevo.
-version: "2.0"
-compatibility: Requires Entra ID secrets in OpenHands UI (App ID, Directory ID, Secret, Object ID) or BREVO_API_KEY.
+description: Send emails, notifications, and RFQ campaigns from natural language Azure Work Item prompts via Microsoft Graph API (Entra ID OAuth) or Brevo.
+version: "2.2"
 metadata:
   author: ryz
 triggers:
   - send an email
+  - email someone
   - notify by email
-  - notification simulation
-  - generate leads
   - rfq emails
 ---
 # Email Automation
 
-Automated email delivery via Microsoft Graph API (OAuth 2.0) and Brevo.
+Autonomously process email requests from natural language Azure Work Items (WI) via Microsoft Graph API.
 
-## Core Rules
-- **Automatic Sender**: Sender is locked to the requesting user's email, auto-resolved via Entra ID `OBJECT_ID`. **Never ask the user for a sender address.**
-- **Scope**: Recipients must match sender domain or allowlist. Bypass for external outreach using `--transactional`.
-- **HITL (Human in the Loop)**: Always execute dry run first. Present preview payloads and pause for user confirmation before `--send`.
-- **Compliance**: Never delete archive manifests or rendered `.html` payloads.
+## Rules
+- **No CLI For Users**: Users provide plain English prompts only. Never ask users for CLI flags (`--send`, `--template`, `--body`) or commands.
+- **Auto Sender**: Resolved via Entra ID (`OBJECT_ID` or user email). Never prompt for sender.
+- **No External Block**: External recipients are allowed directly.
+- **HITL (Human in the Loop)**: Always dry run first. Present review artifact and wait for user approval before dispatch.
 
-## 1. Lead Generation Workflow (RFQs)
-1. **Discover**: Search target domains via search tool. Save to `domains.csv`.
-2. **Extract**: `python scripts/extract_emails.py --input domains.csv --output leads.csv`
-3. **Validate**: `python scripts/validate_leads.py --input leads.csv --output leads_validated.csv`
-4. **Template**: Pick/create template in `plugins/email-automation/templates/*.j2`.
-5. **Preview**: Run dry run without `--send`.
-6. **HITL Pause**: Present sample and ask user for confirmation.
-7. **Send**: Run with `--transactional --send`.
+## Decision Matrix
+1. **One-Off Email**: Extract recipient, subject, body from prompt. Run dry run with `--body` (no `.j2` template file on disk). Reply in WI with formatted preview (To, Subject, Body) asking confirmation.
+2. **Ready Template**: For standard notices/alerts/RFQs, use `templates/{alert,default,rfq}.html.j2`.
+3. **New Template**: Save `templates/<name>.html.j2` only when explicitly requested by user.
+4. **Bulk / RFQ**: Discover/extract leads to CSV. Reply in WI with `.csv` path and recipient summary table for review.
 
-## 2. Notification Workflow
-1. Select template (`.j2`) and recipients (`.csv`, `.json`, or `--to`).
-2. **Dry Run (Required)**: Render payloads and inspect scope.
-3. **HITL Pause**: Wait for user confirmation.
-4. **Send**: Run with `--send` (add `--confirm-bulk` if >50 recipients).
-
-## Execution CLI
-
+## Commands (Internal Agent Use)
 ```bash
-SEND=$(find "$HOME/.openhands/cache/plugins" . -name send_campaign.py -type f 2>/dev/null | head -1)
+# One-off dry run (no template file)
+python scripts/send_campaign.py --to "<to>" --subject "<subject>" --body "<content>"
 
-# Dry run (Sender auto-resolved from Entra ID)
-python "$SEND" --template alert.j2 --recipients reps.csv --subject "Notification"
+# Template dry run
+python scripts/send_campaign.py --template templates/<tpl>.html.j2 --to "<to>" --subject "<subject>"
 
-# Send via Microsoft Graph (Default)
-python "$SEND" --template alert.j2 --recipients reps.csv --subject "Notification" --send
+# Bulk RFQ dry run
+python scripts/send_campaign.py --template templates/rfq.html.j2 --recipients <file>.csv --subject "<subject>"
 
-# Send Transactional / RFQ
-python "$SEND" --template rfq.j2 --recipients leads.csv --subject "RFQ" --transactional --send
-
-# Inline recipients (Quick send)
-python "$SEND" --template alert.j2 --to alice@domain.com --subject "Direct Alert" --send
+# Dispatch (run after user confirms: "Approved" / "Send")
+python scripts/send_campaign.py [same arguments] --send
 ```

@@ -16,8 +16,7 @@ try:
 except ImportError:
     sync_playwright = None
 
-# Strict regex matching emails, explicitly ignoring common image and font extensions
-# and excluding common bad domains.
+# Strict email regex excluding image extensions and bad domains
 EMAIL_REGEX = re.compile(
     r"\b(?![^@\s]+@[^@\s]+\.(?:png|jpg|jpeg|gif|webp|svg|woff|woff2|ico|js|css)\b)"
     r"([a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+)\b"
@@ -108,33 +107,20 @@ def main():
         out_fieldnames.append("notes")
 
     out_rows = []
-    print(f"Extracting emails for {len(rows)} domains...")
-
     for row in rows:
         domain = row["domain"].strip()
         if not domain:
             continue
-            
-        print(f"\nProcessing {domain}...")
-        
-        # 2A
-        print("  Running Step 2A (Scrape)...")
-        emails = step_2a(domain)
-        
-        if not emails:
-            # 2B
-            print("  Running Step 2B (theHarvester)...")
-            emails = step_2b(domain)
 
+        # Extract emails via scraping or Harvester
+        emails = step_2a(domain) or step_2b(domain)
         row["notes"] = ""
         if emails:
-            print(f"  [+] Found: {emails[0]}")
-            row["email"] = emails[0] # Just take the first valid email found
+            row["email"] = emails[0]
         else:
-            print(f"  [-] No emails found.")
             row["email"] = ""
             row["notes"] = "Form only - manual submission required"
-            
+
         out_rows.append(row)
 
     with open(args.output, "w", encoding="utf-8", newline="") as f:
@@ -142,7 +128,8 @@ def main():
         writer.writeheader()
         writer.writerows(out_rows)
 
-    print(f"\nSaved {len(out_rows)} records to {args.output}")
+    found_count = sum(1 for r in out_rows if r["email"])
+    print(f"Extracted {found_count} email(s) from {len(out_rows)} domains -> {args.output}")
 
 if __name__ == "__main__":
     main()

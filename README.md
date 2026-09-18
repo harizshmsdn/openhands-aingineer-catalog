@@ -35,7 +35,7 @@ design: it is what lets you ship a plugin without a rebuild or a redeploy.
 
 | Artifact | Version | Cadence | Changed by |
 | --- | --- | --- | --- |
-| This catalog | `v0.1.1` | Weekly — whenever a PR merges | Anyone, via PR |
+| This catalog | `v0.1.4` | Weekly — whenever a PR merges | Anyone, via PR |
 | Sandbox image | `openhands-aingineer-sandbox:v1` | On demand for new root/system tools | Platform owner |
 
 A normal contribution touches only the left column: add a directory under
