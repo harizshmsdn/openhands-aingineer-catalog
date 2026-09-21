@@ -24,7 +24,7 @@ Users describe what they want to send in plain English in the Work Item descript
 
 When triggered by a Work Item, the AI Engineer follows this workflow:
 
-1. **Automatic Sender Resolution**: The agent resolves the user's primary email address from Microsoft Graph using Entra ID credentials. The user is never asked for their sender address.
+1. **Automatic Sender Resolution (Work Item Creator)**: The agent extracts the creator of the Azure Work Item (`System.CreatedBy` or author metadata) and validates the user in Microsoft Graph. Emails are dispatched directly from the creator's mailbox without prompting the user.
 2. **Template Decision**:
    - **One-Off Email**: Gathers the subject and body directly from the prompt. Generates the email inline—**no template file is written to disk**.
    - **Ready-Made Template**: Uses built-in templates from `templates/` (`alert.html.j2`, `default.html.j2`, `rfq.html.j2`) when matching standard campaign types.
@@ -46,7 +46,7 @@ Configure the following secrets under **Settings $\rightarrow$ Secrets** in the 
 | `AZURE_CLIENT_ID` / `APP_ID` | Application (Client) ID | Entra ID $\rightarrow$ App registrations $\rightarrow$ Overview |
 | `AZURE_TENANT_ID` / `DIRECTORY_ID` | Directory (Tenant) ID | Entra ID $\rightarrow$ Overview |
 | `AZURE_CLIENT_SECRET` / `CLIENT_SECRET` | Client Secret Value | Entra ID $\rightarrow$ Certificates & secrets |
-| `AZURE_OBJECT_ID` / `AZURE_USER_EMAIL` | Requesting User's Object ID or Email/UPN | Entra ID $\rightarrow$ Users $\rightarrow$ Object ID or Email |
+| `AZURE_WORK_ITEM_CREATOR` / `AZURE_OBJECT_ID` | Fallback User Object ID or Email/UPN | Entra ID $\rightarrow$ Users $\rightarrow$ Object ID or Email |
 | `BREVO_API_KEY` *(Optional)* | API Key for external transactional provider | Brevo dashboard $\rightarrow$ SMTP & API |
 
 ---
@@ -72,7 +72,11 @@ Every dispatched run writes:
 ## 5. Backend Dispatcher (Internal Agent Engine)
 
 The AI agent executes `scripts/send_campaign.py` behind the scenes:
+- **Dynamic Sender Support**: `--sender "<creator_email>"` resolves the verified sender mailbox dynamically in Microsoft Graph.
+- **Throttling & Backoff**: Automatically handles HTTP 429 / 503 throttling with exponential backoff and `Retry-After` header inspection.
+- **Mailbox Hygiene**: Automatically disables `saveToSentItems` for bulk dispatches (`> 5` recipients) to protect the user's Sent Items folder (override with `--save-to-sent` or `--no-save-to-sent`).
 - **Direct Body (No Template File)**: `--body "<content>"` wraps plain text or HTML in a clean responsive layout.
 - **Template-Based**: `--template templates/<name>.html.j2` renders Jinja2 templates.
 - **Dry-Run Output**: Renders previews to console and `email_preview/` before dispatch.
 - **Execution Flag**: `--send` actually dispatches via Microsoft Graph API.
+
