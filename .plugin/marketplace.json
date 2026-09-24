@@ -12,6 +12,11 @@
       "name": "email-automation",
       "source": "./plugins/email-automation",
       "description": "Send templated emails and run automated email campaigns via Microsoft Graph API (Entra ID OAuth) and Brevo"
+    },
+    {
+      "name": "pr-review",
+      "source": "./plugins/pr-review",
+      "description": "Review Azure DevOps pull requests and post findings as comment threads via the Azure Repos PR API"
     }
   ],
   "skills": []

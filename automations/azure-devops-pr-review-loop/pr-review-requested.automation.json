@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "kind": "automation",
+  "spec": {
+    "name": "ADO PR Review Loop - Review Requested",
+    "enabled": false,
+    "timeout": 900,
+    "trigger": {
+      "type": "event",
+      "source": "azure-devops",
+      "on": "ms.vss-code.git-pullrequest-comment-event",
+      "filter": "contains(resource.comment.content, '/review')"
+    },
+    "plugins": [
+      {
+        "repository": "https://github.com/harizshmsdn/openhands-aingineer-catalog.git",
+        "ref": "v0.1.5",
+        "path": "plugins/pr-review"
+      }
+    ],
+    "prompt": "Someone commented `/review` on an Azure DevOps pull request to request another review pass. Read the triggering event payload for the organization, project, repository, PR id, and the triggering comment's author and content — don't assume any of these, they vary per run.\n\n1. Check who authored the triggering comment. If this agent posted it rather than a human, stop immediately and do nothing. This agent's own review comments tell developers to comment `/review` to request the next pass, so they contain the trigger phrase; acting on one would make this automation re-trigger itself indefinitely.\n2. Fetch the pull request's existing comment threads, including this agent's previous review comments, and the commits pushed since that last review.\n3. Review the pull request's current diff using the PR-review skill available in this environment. Follow that skill's instructions for review depth, findings format, and severity conventions. Give particular attention to whether the findings from this agent's previous reviews have actually been addressed by the commits pushed since.\n4. Post the review as a new comment thread on the pull request via the Azure Repos PR review API, not as a plain top-level comment. State explicitly which previously-flagged findings are now resolved and which still stand.\n5. If the review has no blocking findings, mark it as approved (or per the skill's convention).\n6. End your review comment by telling the developer that automated review does not run on pushes — when they have pushed the next round of fixes and want another pass, they should comment `/review` again.\n\nOnly touch the repository and pull request named in this run's event payload. Do not modify code yourself in this conversation — this is a review-only pass; a human pushes any fixes."
+  }
+}

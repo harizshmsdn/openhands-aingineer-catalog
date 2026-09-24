@@ -1,0 +1,9 @@
+{
+  "name": "pr-review",
+  "version": "1.0.0",
+  "description": "Review Azure DevOps pull requests and post findings as comment threads via the Azure Repos PR API",
+  "author": {
+    "name": "ryz",
+    "email": "-"
+  }
+}
